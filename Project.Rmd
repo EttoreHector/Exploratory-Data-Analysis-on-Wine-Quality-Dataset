@@ -1,0 +1,961 @@
+---
+output:
+  html_document:
+    fig_caption: yes
+  pdf_document: default
+---
+Project Wine Quality Exploration - by Ettore Murabito
+========================================================
+
+# Data Exploration
+
+```{r loading data and ggplot library, echo = FALSE}
+# Load some useful functions
+source('utilities.R')
+
+# Load data-set and remove column of indeces
+library(ggplot2)
+wf <- read.csv('wineQualityReds.csv', sep = ',')
+wf$X <- NULL
+```
+
+***
+## List of variables in the data-set
+```{r variables name, echo = FALSE}
+print(names(wf))
+input_variables <- names(wf)[-length(names(wf))][]
+output_variable <- names(wf)[length(names(wf))]
+```
+  
+***
+## Red Wide Quality Distribution
+The data-set under consideration was constructed with the intent of applying classification approaches to predict the quality of a wine (the output variable) based on some descriptors (the input variables). It makes sense, then, to start by plotting the distribution of the output variable "quality" and printing the corresponding summary.
+
+```{r quality distribution, echo = FALSE}
+ggplot(aes(factor(quality)), data = wf) + 
+  geom_histogram(col="black", fill = "red", binwidth = 0.5) + 
+  labs(title = "Red Wine Quality Distribution", x = "Quality", y = "Count")
+
+summary(wf$quality)
+```
+
+The vast majority of the wines have a quality of 5 and 6. This is also reflected by the fact that the 25% and 75% quantiles are closer to the mean than to the minimal and maximal value respectively. Also there is no wine with quality smaller than 3 or higher than 8, although the range of possible value goes from 0 (very bad) to 10 (excellent), as specified in the text file describing the data-set.
+
+***
+## Correlation between wine quality and descriptors.
+Keeping in mind that the data-set was constructed to apply classification models for wine quality prediction, we now quantify the correlation between "quality" and each of the other input variables.
+
+```{r Correlation between quality and other variables, echo = FALSE}
+for (column in input_variables)
+{
+  correlation <- cor.test(wf[,output_variable], wf[,column])
+  cat(sprintf('%s  -  %s  -->  Corr: %s\n',
+                output_variable, column, round(correlation$estimate, 3)))
+}
+```
+
+The input variables that appear to have a meaningful correlation with the wine quality (i.e. |corr.| > 0.3) are "alcohol" (corr. = 0.476) and "volatile.acidity" (corr. = -0.391).
+
+***
+## Distribution and summary of the input variables that have a meaningful correlation with "quality".
+```{r echo = FALSE}
+library(gridExtra)
+
+bin_alcohol = (max(wf$alcohol) - min(wf$alcohol)) / 30
+p1 <- ggplot(aes(alcohol), data = wf) +
+  geom_histogram(col="black", fill = "red", binwidth = bin_alcohol) +
+  labs(title="Alcohol Distribution") +
+  labs(x="Alcohol", y="Count")
+
+bin_vol.acid = (max(wf$volatile.acidity) - min(wf$volatile.acidity)) / 30
+p2 <- ggplot(aes(volatile.acidity), data = wf) +
+  geom_histogram(col="black", fill = "red", binwidth = bin_vol.acid) +
+  labs(title="Volatile Acidity Distribution") +
+  labs(x="Volatile acidity", y="Count")
+
+grid.arrange(p1, p2, ncol=1)
+
+summary(wf$alcohol)
+summary(wf$volatile.acidity)
+```
+
+The distributions of "alcohol"" and "volatile.acidity"" present long right tails. To have a better idea of how such distributions behave for high values of the corresponding variables we re-plot the histograms in log-10 scale.
+
+```{r echo = FALSE}
+bin_alcohol = (max(log10(wf$alcohol)) - min(log10(wf$alcohol))) / 30
+
+p1 <- ggplot(aes(alcohol), data = wf) + 
+  geom_histogram(col="black", fill = "red", binwidth = bin_alcohol) + 
+  labs(title="Alcohol Distribution") + 
+  labs(x="Alcohol", y="Count") + scale_x_log10()
+
+bin_vol.acid = 
+  (max(log10(wf$volatile.acidity)) - min(log10(wf$volatile.acidity))) / 30
+
+p2 <- ggplot(aes(volatile.acidity), data = wf) + 
+  geom_histogram(col="black", fill = "red", binwidth = bin_vol.acid) + 
+  labs(title="Volatile Acidity Distribution") + 
+  labs(x="Volatile acidity", y="Count") + scale_x_log10()
+
+grid.arrange(p1, p2, ncol=1)
+```
+
+The shape of the two distributions (mostly for "alcohol") does not change dramatically after applying the log10 transformation. Even the correlation of the transformed quantities with "quality" is substantially the same:
+
+```{r echo = FALSE}
+cor_log10_alcohol  <- cor.test(wf$quality, log10(wf$alcohol))
+cor_log10_vol.acid <- cor.test(wf$quality, log10(wf$volatile.acidity))
+
+cat(sprintf('quality  -  log10(alcohol)  -->  Corr: %s
+quality  -  log10(volatile.acidity)  -->  Corr: %s\n',
+round(cor_log10_alcohol$estimate, 3),
+round(cor_log10_vol.acid$estimate, 3)))
+```
+
+***
+## Exploring the correlation of "quality"" with "alcohol" and "volatile acidity".
+First let's see how alcohol and volatile.acidity plot versus quality.
+
+```{r Box-plots of alcohol versus quality, echo = FALSE}
+p3 <- ggplot(aes(x = factor(quality), y = alcohol), data = wf) + 
+  geom_boxplot()
+
+p4 <- ggplot(aes(x = factor(quality), y = volatile.acidity), data = wf) + 
+  geom_boxplot()
+
+grid.arrange(p3, p4, ncol=1)
+```
+
+Judging from the box-plots above there seems to be a more obvious (negative) correlation between "volatile.acidity" and "quality" than between "alcohol" and "quality", although the respective correlation coefficients would suggest otherwise.
+
+In the plots below we show the scatter plot of "alcohol" and "volatile.acidity" versus "quality". The dashed red line connect the means of "alcohol" (plot above) and "volatile.acidity" (plot below) across the different values of "quality".
+The blue line and the grey strip around it is the linear regression line with the 95% confidence region.
+
+```{r echo = FALSE}
+
+ggplot(aes(quality, alcohol), data = wf) + 
+  geom_point(position = position_jitter(width = .3), alpha = .3, 
+             colour = 'green4') + 
+  geom_line(stat = 'summary', fun.y = mean, color = 'red', linetype = 2) + 
+  geom_smooth(method=lm)
+
+ggplot(aes(quality, volatile.acidity), data = wf) + 
+    geom_point(position = position_jitter(width = .3), alpha = .3, 
+             colour = 'green4') + 
+  geom_line(stat = 'summary', fun.y = mean, color = 'red', linetype = 2) + 
+  geom_smooth(method=lm)
+```
+
+For a given wine quality there is a wide spectrum of alcohol content and volatile acidity. By setting alpha = 0.3 as parameter of geom_point and jittering the data-points (as we did in the two plots above) we can have a better understanding on where such ranges are more populated.
+In doing so we also have another visual confirmation of what we observed before, i.e. that most of the wines in the data-set have a quality of 5 or 6.
+
+***
+
+Although the variables "alcohol" and "volatile.acidity" have a meaningful correlation with "quality" (|corr.| > 0.3), one should be very cautious about using them as predictors of the wine quality. As already observed, the ranges of values of such variables across different qualities are very wide and overlap with each other considerably.
+
+```{r echo = FALSE}
+
+p1 <- ggplot(aes(x = alcohol), data = subset(wf, quality == 3)) + 
+  geom_density() + xlim(min(wf$alcohol), max(wf$alcohol)) + 
+  ggtitle("quality = 3")
+
+p2 <- ggplot(aes(x = alcohol), data = subset(wf, quality == 4)) + 
+  geom_density() + xlim(min(wf$alcohol), max(wf$alcohol)) + 
+  ggtitle("quality = 4")
+
+p3 <- ggplot(aes(x = alcohol), data = subset(wf, quality == 5)) + 
+  geom_density() + xlim(min(wf$alcohol), max(wf$alcohol)) + 
+  ggtitle("quality = 5")
+
+p4 <- ggplot(aes(x = alcohol), data = subset(wf, quality == 6)) + 
+  geom_density() + xlim(min(wf$alcohol), max(wf$alcohol)) + 
+  ggtitle("quality = 6")
+
+p5 <- ggplot(aes(x = alcohol), data = subset(wf, quality == 7)) + 
+  geom_density() + xlim(min(wf$alcohol), max(wf$alcohol)) + 
+  ggtitle("quality = 7")
+
+p6 <- ggplot(aes(x = alcohol), data = subset(wf, quality == 8)) + 
+  geom_density() + xlim(min(wf$alcohol), max(wf$alcohol)) + 
+  ggtitle("quality = 8")
+
+grid.arrange(p1, p2, p3, p4, p5, p6, ncol = 2)
+```
+
+It is apparent that the density of the alcohol content per quality category are wide and overlap with each other to a great extent. Only a mild trend of increasing alcohol with increasing quality can be observed.
+
+A similar argument applies for the density plots of "volatile.acidity" shown below, although this other variable tends to decrease with increasing values of "quality".
+
+```{r Density distributions 2, echo = FALSE}
+
+m <- min(wf$volatile.acidity)
+M <- max(wf$volatile.acidity)
+
+p1 <- ggplot(aes(x = volatile.acidity), data = subset(wf, quality == 3)) + 
+  geom_density() + xlim(m,M) + ggtitle("quality = 3")
+
+p2 <- ggplot(aes(x = volatile.acidity), data = subset(wf, quality == 4)) + 
+  geom_density() + xlim(m,M) + ggtitle("quality = 4")
+
+p3 <- ggplot(aes(x = volatile.acidity), data = subset(wf, quality == 5)) + 
+  geom_density() + xlim(m,M) + ggtitle("quality = 5")
+
+p4 <- ggplot(aes(x = volatile.acidity), data = subset(wf, quality == 6)) + 
+  geom_density() + xlim(m,M) + ggtitle("quality = 6")
+
+p5 <- ggplot(aes(x = volatile.acidity), data = subset(wf, quality == 7)) + 
+  geom_density() + xlim(m,M) + ggtitle("quality = 7")
+
+p6 <- ggplot(aes(x = volatile.acidity), data = subset(wf, quality == 8)) + 
+  geom_density() + xlim(m,M) + ggtitle("quality = 8")
+
+grid.arrange(p1, p2, p3, p4, p5, p6, ncol = 2)
+```
+
+***
+
+## Distributions and summary of the other input variables.
+
+We now have a look at the distributions and summaries of the other input variables (other than "alcohol" and "volatile.acidity").
+
+```{r echo = FALSE}
+
+for (column in input_variables){
+  if (column != 'alcohol' & column != 'volatile.acidity'){
+    bin = (max(wf[,column]) - min(wf[,column]))/30
+    print(ggplot(aes(wf[,column]), data = wf) + 
+      geom_histogram(col = "black", fill = "red", binwidth = bin) + 
+      labs(title = c(column, ' distribution'), x = column, y="Count"))
+    
+    print(summary(wf[,column]))
+  } 
+}
+```
+
+We notice that most of the input variables' distributions have a long right tail. It is not always apparent whether these long tails are due to the nature of the variable (as it would seem for "free.sulfur.dioxide") or the presence of outliers / oddities in the data-set (as it would seem for "total.sulfur.dioxide").
+
+To assess how the presence of possible outliers impacts the correlation of the different input-variables with "quality", we proceed by:
+
+1. Identifying the variables for wich the difference between maximal value and 3rd quantile is al least 10 times larger than the difference between the 3rd quantile and the median. The list of such variables is shown below.
+
+```{r echo = FALSE}
+long_right_tail <- find_lrt(wf[,1:(ncol(wf)-1)])
+for (i in 1:length(long_right_tail)){
+  cat(sprintf('%s\n', long_right_tail[i]))
+}
+```
+
+2. Removing from the data-set those entries with values for any of the input variables listed above larger than the corresponding 99 percentile.
+
+``` {r echo = FALSE}
+
+percentile = list()
+for (column in long_right_tail){
+  percentile[column] = quantile(wf[,column], 0.99)
+}
+
+to_be_removed = vector()
+for (r in 1:nrow(wf)){
+  for (c in long_right_tail){
+    if (wf[r,c] >= percentile[c]){
+      to_be_removed = c(to_be_removed, r)
+      break
+    }
+  }
+}
+
+wf4 = wf[-to_be_removed,]
+```
+
+3. Recalculating the correlation between all the input variables and "quality" based on the pruned data-set. The new correlation coefficients are listed below.
+
+``` {r echo = FALSE}
+
+for (column in input_variables)
+{
+  if (column != 'quality')
+  {
+    correlation <- cor.test(wf4$quality, wf4[,column], method=("pearson"))
+    cat(sprintf('quality  -  %s  -->  Corr: %s\n',
+                column, round(correlation$estimate, 3)))
+  }
+}
+```
+
+After pruning the data-set the input variable "sulphates" also appear to have a meaningful correlation with "quality". We also notice that the correlation between "volatile.acidity" and "quality" remain substantially unchanged and above the threshold of 0.3.
+
+We now have a look at the scatter-plot of "alcohol" vs "quality", "volatile.acidity" vs "quality" and "sulphates" vs "quality" considering the pruned data-set.
+
+```{r echo = FALSE}
+
+ggplot(aes(quality, alcohol), data = wf4) + 
+  geom_point(position = position_jitter(width = .3), alpha = .3, 
+             colour = 'green4') + 
+  geom_line(stat = 'summary', fun.y = mean, color = 'red', linetype = 2) + 
+  geom_smooth(method=lm)
+
+ggplot(aes(quality, volatile.acidity), data = wf4) + 
+    geom_point(position = position_jitter(width = .3), alpha = .3, 
+             colour = 'green4') + 
+  geom_line(stat = 'summary', fun.y = mean, color = 'red', linetype = 2) + 
+  geom_smooth(method=lm)
+
+ggplot(aes(quality, sulphates), data = wf4) + 
+    geom_point(position = position_jitter(width = .3), alpha = .3, 
+             colour = 'green4') + 
+  geom_line(stat = 'summary', fun.y = mean, color = 'red', linetype = 2) + 
+  geom_smooth(method=lm)
+```
+
+***
+## Multivariate Analysis for "quality", "alcohol", "volatile.acidity" and "sulphates".
+Let us see now how "quality" changes with the input-variables "alcohol", "volatile.acidity" and "sulphates" considered two at the same time (the pruned data-set is still used here).
+
+```{r echo = FALSE}
+p1 <- ggplot(aes(alcohol, volatile.acidity, colour = quality), data = wf4) + 
+  geom_point(position = position_jitter(width = .05), alpha = 0.5) + 
+  scale_colour_gradient(low = "blue", high = "red", space = "Lab", 
+                        na.value = "grey50", guide = "legend")
+
+p2 <- ggplot(aes(alcohol, sulphates, colour = quality), data = wf4) + 
+  geom_point(position = position_jitter(width = .05), alpha = 0.5) + 
+  scale_colour_gradient(low = "blue", high = "red", space = "Lab", 
+                        na.value = "grey50", guide = "legend")
+
+p3 <- ggplot(aes(volatile.acidity, sulphates, colour = quality), data = wf4) + 
+  geom_point(position = position_jitter(width = .02), alpha = 0.5) + 
+  scale_colour_gradient(low = "blue", high = "red", space = "Lab", 
+                        na.value = "grey50", guide = "legend")
+
+grid.arrange(p1, p2, p3, ncol = 2)
+```
+
+Because most of the wines have quality between 5 and 6 (i.e. in the middle of the range of possible values), the vast majority of the dots are colored in violet. The fact that the violet dots are scattered in a vast area of the plot tells us that wines with average quality (i.e. 5 or 6) can have a wide range of values in terms of alcohol content, sulphates content and volatile acidity. This makes difficult to actually use "alcohol", "sulphates" and "volatile.acidity" as predictors for the wine quality.
+However, it is interesting to see whether a more clear trend can be seen for wines with quality lower than 5 or higher than 6. For such wines a better correlation might be found.
+
+```{r echo = FALSE}
+wf4.subset <- subset(wf4, quality < 5 | quality > 6)
+correlation_volacid <- cor.test(wf4.subset$quality,wf4.subset$volatile.acidity)
+correlation_alcohol <- cor.test(wf4.subset$quality,wf4.subset$alcohol)
+correlation_sulphat <- cor.test(wf4.subset$quality,wf4.subset$sulphates)
+
+
+cat(sprintf('Quality (<5 or >6)  -  alcohol               -->\tCorr: %s 
+Quality (<5 or >6)  -  volatile.acidity:  -->\tCorr: %s 
+Quality (<5 or >6)  -  sulphates:         -->\tCorr: %s \n', 
+round(correlation_alcohol$estimate, 3), 
+round(correlation_volacid$estimate, 3),
+round(correlation_sulphat$estimate, 3)))
+```
+
+As we can see the correlation of "quality" with "alcohol", "volatile.acidity" and "sulphates" is higher in absolute value when limiting our analysis to non-average wines (i.e. wines with quality < 5 or quality > 6). We can visually see this in the plot below, where only non-average wines are considered.
+
+``` {r echo = FALSE}
+p1 <- ggplot(aes(x = alcohol, y = volatile.acidity, colour = quality), 
+       data = wf4.subset) + 
+  geom_point(position = position_jitter(width = .05), alpha = 0.5) + 
+  scale_colour_gradient(low = "blue", high = "red", space = "Lab", 
+                        na.value = "grey50", guide = "legend")
+
+p2 <- ggplot(aes(x = alcohol, y = sulphates, colour = quality), 
+       data = wf4.subset) + 
+  geom_point(position = position_jitter(width = .05), alpha = 0.5) + 
+  scale_colour_gradient(low = "blue", high = "red", space = "Lab", 
+                        na.value = "grey50", guide = "legend")
+
+p3 <- ggplot(aes(x = volatile.acidity, y = sulphates, colour = quality), 
+       data = wf4.subset) + 
+  geom_point(position = position_jitter(width = .02), alpha = 0.5) + 
+  scale_colour_gradient(low = "blue", high = "red", space = "Lab", 
+                        na.value = "grey50", guide = "legend")
+
+grid.arrange(p1, p2, p3, ncol = 2)
+```
+
+One can see a tendency of higher alcohol content, higher sulphates content and lower volatile acidity being associated with higher quality. These results seem to confirm that average wines bear most of the noise in the data-set (at least for the variables "alcohol", "sulphates" and "volatile.acidity").
+
+***
+## Reassessing correlations for non-average wines.
+Based on what observed in the previous section, we want to see whether the correlation of "quality" with the other input-variables become meaningful (i.e. |corr.| > 0.3) when limiting our analysis to non-average wines.
+
+```{r echo = FALSE}
+for (column in names(wf4.subset))
+{
+  if (column != 'quality')
+  {
+    correlation <- cor.test(wf4.subset$quality, wf4.subset[,column])
+    cat(sprintf('quality  -  %s\t-->\tCorr: %s\n', 
+                column, round(correlation$estimate, 3)))
+  }
+}
+```
+
+Indeed another variables appear to have a meaningful correlation with quality for non-average wines: "citric.acid" (corr. = 0.363).
+
+***
+## Looking for correlations among all the variables in the dataset.
+We now look for meaningful correlations among all the variables in the data-set (again the data-set pruned from outliers).
+
+```{r echo = FALSE}
+library(GGally)
+
+#theme_set(theme_minimal(20))
+#ggpairs(wf4, axisLabels = 'none', legends = FALSE, verbose = FALSE, 
+#        upper=list(params=list(size=3)), 
+#        title="Correlation matrix with plots")
+cor(wf)
+```
+
+We limit our investigation to correlations with absolute value higher than 0.6. Such correlations involve the following pairs of variables.
+
+```{r echo = FALSE}
+for (i in 1:(length(names(wf4))-1))
+{
+  for (j in (i+1):length(names(wf4)))
+  {
+    correlation <- cor.test(wf4[,i], wf4[,j])
+    if (abs(correlation$estimate) > 0.6)
+    {
+      cat(sprintf('%s  -  %s  -->  Corr: %s\n', 
+                  input_variables[i], input_variables[j], 
+                  round(correlation$estimate,3)))
+    }
+  }
+}
+```
+
+The plots shown below provide us with a visual representation of how such variables correlate with each other.
+
+```{r Other corelation plots, echo = FALSE}
+p1 <- ggplot(aes(fixed.acidity, citric.acid), data = wf4) + 
+  geom_point(color = 'green4', alpha = 0.1) + 
+  geom_line(stat = 'summary', fun.y = mean) + 
+  geom_smooth(method=lm) +
+  theme(axis.text=element_text(size=10), axis.title = element_text(size=13))
+
+p2 <- ggplot(aes(fixed.acidity, pH), data = wf4) + 
+  geom_point(color = 'green4', alpha = 0.1) + 
+  geom_line(stat = 'summary', fun.y = mean) + 
+  geom_smooth(method=lm) +
+  theme(axis.text=element_text(size=10), axis.title = element_text(size=13))
+
+p3 <- ggplot(aes(fixed.acidity, density), data = wf4) + 
+  geom_point(color = 'green4', alpha = 0.1) + 
+  geom_line(stat = 'summary', fun.y = mean) + 
+  geom_smooth(method=lm) +
+  theme(axis.text=element_text(size=10), axis.title = element_text(size=13))
+
+p4 <- ggplot(aes(total.sulfur.dioxide, free.sulfur.dioxide), data = wf4) + 
+  geom_point(color = 'green4', alpha = 0.1) + 
+  geom_line(stat = 'summary', fun.y = mean) + 
+  geom_smooth(method=lm) +
+  theme(axis.text=element_text(size=10), axis.title = element_text(size=13))
+
+grid.arrange(p1, p2, p3, p4, ncol=2)
+```
+
+The black line in each plot shows how the mean of the variable in the y-axis varies with the variable in the x-axis. The blue line and the grey strip around it is the linear regression line with the 95% confidence region.
+
+***
+
+####Remarks
+From the text file accompanying and describing the data-set of red wines we learn that the variable "fixed.acidity" refers to the content of acids in the wine that are non-volatile (i.e. do not evaporate readily). The fact that "citric.acid" correlates well with "fixed.acidity" would lead us to think that the composition of the acidic mixture in the wine is roughly constant or at least that the relative contribution of the citric acid in the acidic mixture is roughly constant. In both cases the relative difference in the content of citric acid would be a fairly good indicator of the relative difference of the overall fixed acidity of the wine. The top-left plot shows however that there is a substantial variability of citric acid content for a given value of fixed acidity. This forces us to be more cautious about the previous statement on the composition of the acidic mixture in the wine.
+
+Not surprisingly "pH" is negatively correlated with "fixed.acidity". In chemistry "pH" is defined as the negative logarithm base-10 of the concentrations of ions H+ (which determine the acidic content of a solution). From this definition it follows that the higher the acid content of the wine the lower its pH. This is precisely what the top-middle plot in the pane above shows.
+
+Because the fixed acidity is positively correlated with the density of the wine (top-right plot), it seems that the acids contained in the wine are among the most dense chemical components present. 
+
+Following the observation that  the "fixed.acidity" has a strong positive correlation with "citric.acid" (top-left plot) and a strong negative correlation with "pH" (top-right plot), one may expect that "citric.acid" and "pH" have a strong negative correlation with each other. Interestingly such correlation didn't show up as one of those above the threshold 0.6. However, its absolute value is still substantially above the threshold 0.3 of "meaningfulness":
+
+```{r echo = FALSE}
+cat(sprintf('citric.acid  -  pH  -->  Corr: %s',
+            round(cor.test(wf4$citric.acid, wf4$pH)$estimate,3)))
+```
+
+Finally the high positive correlation coefficient between "free.sulfur.dioxide" and "total.sulfur.dioxide" would suggest that the latter has a composition roughly constant, hence a relative variation of the former would be a fair estimate of the relative variation of the latter. However the cone-shapes scatter plot (bottom-right) shows that this rule of thumb suggested by the correlation coefficient becomes less and less accurate for increasing content of total sulfur dioxide.
+
+***
+
+From the scatter-plots shown above it easy to see that there is a lot of noise in the data. This noise is reflected in the black line representing the mean of the y-axis variable (the noise is particularly apparent in the bottom-right plot).
+
+To better distinguish the general trend of the correlation from the noise  we modified the scatter-plot so as to have larger beans on the x-axis. The result is shown below.
+
+```{r echo = FALSE}
+
+wf4_augmented <- wf4
+
+wf4_augmented$fixed.acidity.disc <- 
+  discretize(wf4$fixed.acidity, 15)
+
+wf4_augmented$total.sulfur.dioxide.disc<- 
+  discretize(wf4$total.sulfur.dioxide, 15)
+
+wf4_augmented$volatile.acidity.disc <- 
+  discretize(wf4$volatile.acidity, 15)
+
+
+p1 <- ggplot(aes(fixed.acidity.disc, citric.acid), data = wf4_augmented) + 
+  geom_point(position = position_jitter(width = .21), 
+             color = 'green4', alpha = 0.1) + 
+  geom_line(stat = 'summary', fun.y = mean) + 
+  geom_smooth(method=lm) + xlab("fixed.acidity") + 
+  ylab("citric.acid") +
+  theme(axis.text=element_text(size=10), axis.title = element_text(size=13))
+
+p2 <- ggplot(aes(fixed.acidity.disc, pH), data = wf4_augmented) + 
+  geom_point(position = position_jitter(width = .2), 
+             color = 'green4', alpha = 0.1) + 
+  geom_line(stat = 'summary', fun.y = mean) + 
+  geom_smooth(method=lm) + xlab("fixed.acidity") + 
+  ylab("pH") +
+  theme(axis.text=element_text(size=10), axis.title = element_text(size=13))
+
+p3 <- ggplot(aes(fixed.acidity.disc, density), data = wf4_augmented) + 
+  geom_point(position = position_jitter(width = .18), 
+             color = 'green4', alpha = 0.1) + 
+  geom_line(stat = 'summary', fun.y = mean) + 
+  geom_smooth(method=lm) + xlab("fixed.acidity") + 
+  ylab("density") +
+  theme(axis.text=element_text(size=10), axis.title = element_text(size=13))
+
+p4 <- ggplot(aes(total.sulfur.dioxide.disc, free.sulfur.dioxide), 
+             data = wf4_augmented) + 
+  geom_point(position = position_jitter(width = 3), 
+             color = 'green4', alpha = 0.1) + 
+  geom_line(stat = 'summary', fun.y = mean) + 
+  geom_smooth(method=lm) + xlab("total.sulfur.dioxide") + 
+  ylab("free.sulfur.dioxide") +
+  theme(axis.text=element_text(size=10), axis.title = element_text(size=13))
+
+grid.arrange(p1, p2, p3, p4, ncol = 2)
+```
+
+We saw in a precedent section that average wines (quality values between 5 and 6) tend to have a wide range of values for alcohol and volatile acidity. In fact by removing such wines and considering only the non-average wines, the correlation of quality with alcohol and volatile.acidity increased.
+We wonder now whether the noise we see in the data is also mainly ascribable to average-wines.
+
+Below we present again the same plots (with same bean-width as in the plots just above) but limited to non-average wines (quality < 5 or > 6).
+
+```{r echo = FALSE}
+wf4.subset <- subset(wf4_augmented, quality < 5 | quality > 6) 
+
+p1 <- ggplot(aes(fixed.acidity.disc, citric.acid), data = wf4.subset) + 
+  geom_point(position = position_jitter(width = .21), 
+             color = 'green4', alpha = 0.3) + 
+  geom_line(stat = 'summary', fun.y = mean) + 
+  geom_smooth(method=lm) + xlab("fixed.acidity") + 
+  ylab("citric.acid") +
+  theme(axis.text=element_text(size=10), axis.title = element_text(size=13))
+
+p2 <- ggplot(aes(fixed.acidity.disc, pH), data = wf4.subset) + 
+  geom_point(position = position_jitter(width = .20), 
+             color = 'green4', alpha = 0.3) + 
+  geom_line(stat = 'summary', fun.y = mean) + 
+  geom_smooth(method=lm) + xlab("fixed.acidity") + 
+  ylab("pH") +
+  theme(axis.text=element_text(size=10), axis.title = element_text(size=13))
+
+p3 <- ggplot(aes(fixed.acidity.disc, density), data = wf4.subset) + 
+  geom_point(position = position_jitter(width = .18), 
+             color = 'green4', alpha = 0.3) + 
+  geom_line(stat = 'summary', fun.y = mean) + 
+  geom_smooth(method=lm) + xlab("fixed.acidity") + 
+  ylab("density") +
+  theme(axis.text=element_text(size=10), axis.title = element_text(size=13))
+
+p4 <- ggplot(aes(total.sulfur.dioxide.disc, free.sulfur.dioxide), 
+             data = wf4.subset) + 
+  geom_point(position = position_jitter(width = 3), 
+             color = 'green4', alpha = 0.3) + 
+  geom_line(stat = 'summary', fun.y = mean) + 
+  geom_smooth(method=lm) + xlab("total.sulfur.dioxide") + 
+  ylab("free.sulfur.dioxide") +
+  theme(axis.text=element_text(size=10), axis.title = element_text(size=13))
+
+grid.arrange(p1, p2, p3, p4, ncol=2)
+```
+
+After limiting our analysis to non-average wines we saw no further decrease in the noise. In fact the noise appear to be even more pronounced, particularly in the bottom-right plot. This can be due to the fact that the non-average wine subset is considerably smaller than the total subset. Consequently, although in general the range of values of each variable is narrower now, their means are more affected by fluctuations in the data.
+
+***
+
+
+#### Some more univariate analysis
+Although we know that the input variables considered in this section do not have a meaningful correlation with "quality", we still show some plots where one can appreciate the loose relation between each of them with the output variable.
+
+```{r echo = FALSE}
+
+p1 <- ggplot(aes(factor(quality), citric.acid), data = wf) + 
+  geom_point(position = position_jitter(width = .3), alpha = .3, 
+             colour = 'green4') + geom_boxplot(alpha = 0.3)
+
+p2 <- ggplot(aes(factor(quality), pH), data = wf) + 
+  geom_point(position = position_jitter(width = .3), alpha = .3, 
+             colour = 'green4') + geom_boxplot(alpha = 0.3)
+
+p3 <- ggplot(aes(factor(quality), fixed.acidity), data = wf) + 
+  geom_point(position = position_jitter(width = .3), alpha = .3, 
+             colour = 'green4') + geom_boxplot(alpha = 0.3)
+
+p4 <- ggplot(aes(factor(quality), density), data = wf) + 
+  geom_point(position = position_jitter(width = .3), alpha = .3, 
+             colour = 'green4') + geom_boxplot(alpha = 0.3)
+
+p5 <- ggplot(aes(factor(quality), free.sulfur.dioxide), data = wf) + 
+  geom_point(position = position_jitter(width = .3), alpha = .3, 
+             colour = 'green4') + geom_boxplot(alpha = 0.3)
+
+p6 <- ggplot(aes(factor(quality), total.sulfur.dioxide), data = wf) + 
+  geom_point(position = position_jitter(width = .3), alpha = .3, 
+             colour = 'green4') + geom_boxplot(alpha = 0.3)
+
+grid.arrange(p1, p2, p3, p4, p5, p6, ncol=3)
+```
+
+For each variable considered, there is a huge overlapping among the bulks of datapoints (confined between the 1st and 3rd quantile of the variable) across the different quality categories. 
+
+***
+
+## Multivariate Analysis for "citric.acid", "pH" and "density"
+
+Because "citric.acid", "pH" and "density" strongly correlate with the fixed.acidity, one may want to see how well they correlate with each other. From the analysis performed above we already know that the correlation between these three variables is less than 0.6 in absolute value.
+
+```{r echo = FALSE}
+cat(sprintf('citric.acid  -  density  -->  Corr: %s
+density  -  pH           -->  Corr: %s
+pH  -  citric.acid       -->  Corr: %s',
+round(cor.test(wf4$citric.acid, wf4$density)$estimate,3),
+round(cor.test(wf4$density, wf4$pH)$estimate,3),
+round(cor.test(wf4$pH, wf4$citric.acid)$estimate,3)))
+```
+
+Although there are meaningful correlations between the pairs of variables ("citric.acid", "density") and ("citric.acid", "pH"), the correlation between "density" and "pH" is below the threshold of meaningfulness (0.3). We now explore how these three variables correlate with each other.
+
+```{r echo = FALSE}
+p1 <- ggplot(aes(x = citric.acid, y = density, colour = pH), data = wf4) + 
+  geom_point(position = position_jitter(width = .01), alpha = 0.4) +
+  theme(axis.text=element_text(size=10), axis.title=element_text(size=13)) +
+  scale_colour_gradient(low = "blue", high = "red", space = "Lab", 
+                        na.value = "grey50", guide = "colourbar")
+
+p2 <- ggplot(aes(x = pH, y = citric.acid, colour = density), data = wf4) + 
+  geom_point(position = position_jitter(width = .015), alpha = 0.4) +
+  theme(axis.text=element_text(size=10), axis.title=element_text(size=13)) +
+  scale_colour_gradient(low = "blue", high = "red", space = "Lab", 
+                        na.value = "grey50", guide = "colourbar")
+
+p3 <- ggplot(aes(x = density, y = pH, colour = citric.acid), data = wf4) + 
+  geom_point(position = position_jitter(width = .005), alpha = 0.4) + 
+  theme(axis.text=element_text(size=10), axis.title=element_text(size=13)) +
+  scale_colour_gradient(low = "blue", high = "red", space = "Lab", 
+                        na.value = "grey50", guide = "colourbar")
+
+grid.arrange(p1, p2, p3, ncol=2)
+```
+
+The bottom-left plot shows that there is a general tendency to have lower content of citric acid with high pH and viceversa. Conversely the content of citric acid does not seem to depend appreciably on the density.
+
+Regarding the other two plots (top-left and top-right) we observe that most of the points have different shades of violet, with very few points in the red and blue color-zone. In general this may suggest the presence of some outliers in the distributions of "pH" and "density". The effect of such outliers would be that of 'over-stretching' the range of possible values for these two variables although most of the actual values are contained in a substantially smaller region.
+From the distributions of "pH" and "density" shown in a previous section we can see that there are not apparent outliers for these two variables. However such variables seem to be normally distributed, with most of the values contained in a couple of standard deviations from the mean.
+
+We now plot the same figure as above but this time, as a role of thumb, excluding the lowest and highest 10% of the variable represented in color.
+
+```{r echo = FALSE}
+p1 <- ggplot(aes(x = citric.acid, y = density, colour = pH),
+             data = subset(wf4, pH > quantile(pH, 0.1) &
+                             pH < quantile(pH, 0.9))) + 
+  geom_point(position = position_jitter(width = .01), alpha = 0.4) +
+  theme(axis.text=element_text(size=10), axis.title=element_text(size=13)) +
+  scale_colour_gradient(low = "blue", high = "red", space = "Lab", 
+                        na.value = "grey50", guide = "colourbar")
+
+p2 <- ggplot(aes(x = pH, y = citric.acid, colour = density), 
+             data = subset(wf4, density > quantile(density, 0.1) &
+                           density < quantile(density, 0.9))) + 
+  geom_point(position = position_jitter(width = .015), alpha = 0.4) +
+  theme(axis.text=element_text(size=10), axis.title=element_text(size=13)) +
+  scale_colour_gradient(low = "blue", high = "red", space = "Lab", 
+                        na.value = "grey50", guide = "colourbar")
+
+p3 <- ggplot(aes(x = density, y = pH, colour = citric.acid),
+             data = subset(wf4, citric.acid > quantile(citric.acid, 0.1) &
+                             citric.acid < quantile(citric.acid, 0.9))) + 
+  geom_point(position = position_jitter(width = .005), alpha = 0.4) + 
+  theme(axis.text=element_text(size=10), axis.title=element_text(size=13)) +
+  scale_colour_gradient(low = "blue", high = "red", space = "Lab", 
+                        na.value = "grey50", guide = "colourbar")
+
+grid.arrange(p1, p2, p3, ncol=2)
+```
+
+Now it is possible to see from the top-left plot too that there is a mild tendency to have lower pH associated with higher content of citric acid and viceversa.
+
+Conversely the top-right plot shows that it is not possible to have even a rough guess of the density of the wine based on the citric acid content and the pH.
+
+The trends observed in the plots above are quite mild, hence none of the three variables there represented can be considered as redundant since there is not a strong relationship with the other two.
+
+***
+
+## Predicting the wine quality
+We now set a classifier to predict the wine quality. We use SVM for the classification. Prior to the training of the classifier we scale the features, so that those with a larger range of values will not dominate those with a smaller range of values.
+
+We use the data-set pruned from the long right tails / outliers (i.e. from the highest 1% percentiles of the input variables). The only three variables with a meaningful correlation with "quality" in such a pruned data-set are "alcohol", "volatile.acidity" and "sulphates". We first include in our model only these three (scaled) input variables.
+
+We split the data-set in a training-set, accounting for 70% of the data-points, and a test-set, accounting for the remaining 30%. The gamma parameter of SVM was set to the inverse of the number of features considered (in this case three: "alcohol", "volatile.acidity" and "sulphates").The confusion matrix obtained is shown below:
+
+```{r echo = FALSE}
+
+# Features and class selection
+attribs <- wf[,c('alcohol', 'volatile.acidity', 'sulphates')]
+class <- as.character(wf[,'quality'])
+
+# Splitting dataset in training set (70%) and test set (30%)
+pippo <- split_train_test(wf, attribs, class, 0.7)
+
+# Training SVM
+library(e1071)
+model <- svm(pippo$AttrTrain, pippo$ClassTrain, type="C-classification", 
+             na.action = na.omit, scale = TRUE, 
+             gamma = 1 / ncol(pippo$AttrTrain))
+
+# Predictions
+prediction <- predict(model, pippo$AttrTest)
+tab <- table(pred = prediction, true = pippo$ClassTest)
+print(tab)
+```
+
+We notice that no wine with quality value of 3, 4 or 8 is correctly classified. This result was consistent across different training sets randomly sampled from the original data-set.
+
+To assess how well the classifier performs we use two metrics. The first metrics is the ratio between all the correctly classified wines versus all the incorrectly classified wines. This metrics gives more importance to the "absolute" performance of the classifier, regardless how different each quality category is represented in the test set.
+
+```{r echo = FALSE}
+met1 <- metrics_1(tab)
+cat(sprintf('Simple ratio between correctly versus incorrectly classified wines
+(Metrics 1): %s\n', round(met1,3)))
+```
+
+The drawback of this metrics is that it overlooks the performance of the classifier on the less represented quality values.
+
+The second metrics is the average of the ratios between correctly and incorrectly classified wines across the different quality values. This allows us to asses how the classifier is performing in average while given the same importance to all the quality categories. 
+
+```{r echo = FALSE}
+met2 <- metrics_2(tab)
+cat(sprintf('Average ratio of correctly classified wines across quality values
+(Metrics 2): %s\n', round(met2,3)))
+```
+
+We now include all the input variables in our model to see whether the predictive power of the classifier increases.
+
+```{r echo = FALSE}
+
+# Features and class selection
+attribs <- wf[,c(1:(ncol(wf)-1))]
+class <- as.character(wf[,ncol(wf)])
+
+# Splitting dataset in training set (70%) and test set (30%)
+pippo <- split_train_test(wf, attribs, class, 0.7)
+
+# Training SVM
+library(e1071)
+model <- svm(pippo$AttrTrain, pippo$ClassTrain, type="C-classification", 
+             na.action = na.omit, scale = TRUE,
+             gamma = 1 / ncol(pippo$AttrTrain))
+
+# Predictions
+prediction <- predict(model, pippo$AttrTest)
+tab <- table(pred = prediction, true = pippo$ClassTest)
+print(tab)
+```
+
+In this case the values of the two metrics are:
+
+```{r echo = FALSE}
+met1 <- metrics_1(tab)
+met2 <- metrics_2(tab)
+
+cat(sprintf('Metrics 1: %s\nMetrics 2: %s\n', 
+            round(met1,3), round(met2,3)))
+```
+
+The increasing values of both metrics is consistent across different training sets (the magnitude of the increase varies but the metrics' values always increase).
+
+The problem with having two quality categories over-represented is that the classifier tends to over-fit to the data falling in those categories. To avoid this we subset the original data-set so that each quality category is represented by up to 100 wines (the quality category less represented in the original data-set is "3" with 10 wines).
+
+```{r echo = FALSE}
+# Creating new dataset
+new_wf = {}
+for (i in min(wf[, 'quality']):max(wf[, 'quality'])){
+  n_samples = 100
+  temp <- subset(wf, quality == i)
+  if (nrow(temp) < n_samples){
+    n_samples = nrow(temp)
+  }
+  tindex <- sample(nrow(temp), n_samples)
+  new_wf <- rbind(new_wf, temp[tindex,])
+}
+
+# Features and class selection
+attribs <- new_wf[,c(1:(ncol(new_wf)-1))]
+class <- as.character(new_wf[,ncol(new_wf)])
+
+# Splitting dataset in training set (70%) and test set (30%)
+pippo <- split_train_test(new_wf, attribs, class, 0.7)
+
+# Training SVM
+library(e1071)
+model <- svm(pippo$AttrTrain, pippo$ClassTrain, type="C-classification", 
+             na.action = na.omit, scale = TRUE, 
+             gamma = 1 / ncol(pippo$AttrTrain))
+
+# Predictions
+prediction <- predict(model, pippo$AttrTest)
+tab <- table(pred = prediction, true = pippo$ClassTest)
+print(tab)
+
+#Metrics
+met1 <- metrics_1(tab)
+met2 <- metrics_2(tab)
+
+cat(sprintf('Metrics 1: %s\nMetrics 2: %s\n', 
+            round(met1,3), round(met2,3)))
+```
+
+We notice that the first metrics has now a lower value than before. Conversely the second metrics' value increased. Although the magnitude of this increase/decrease varies with the sampled training- and test-set, the phenomenon is consistent.
+
+The fact that the second metrics increased indicates that the classifier is performing better in average across the different qualities. This means that we succeeded in reducing the over-fitting of the classifier to the data-points with the far most represented quality values (5 and 6). On the other hand, the decrease of the overall performance (metrics 1) can be ascribable to the fact that quality 5 and 6 are characterized by a higher noise. When forcing the classifier not to over-learn those categories, such noise ends up having a stronger effect.
+
+On a final note we mention that the performance of the classifier on the reduced data-set varies considerably with the specific randomly selected sub-set.
+
+***
+
+# Final Plots and Summary
+### Plot 1
+```{r Final plot 1, echo = FALSE}
+ggplot(aes(factor(quality)), data = wf) + 
+  geom_histogram(col="black", fill = "red", binwidth = 0.5) + 
+  labs(title="Red Wine Quality Distribution") + 
+  labs(x="Quality", y="Count")
+```
+
+Although the range of value for the wine quality goes from 0 (very bed wine) to 10 (excellent wine), no wine in the data-set has a quality lower than 3 or higher than 8.
+The vast majority of the wines have a quality of either 5 or 6. This is also reflected by the fact that the 25% and 75% quantiles are closer to the mean than to the minimal and maximal value respectively.
+
+### Plot 2
+```{r Final plot 2, echo = FALSE}
+
+p1 <- ggplot(aes(alcohol, volatile.acidity, colour = quality), data = wf4) + 
+  geom_point(position = position_jitter(width = .05), alpha = 0.7) + 
+  scale_colour_gradient(low = "blue", high = "red", space = "Lab", 
+                        na.value = "grey50", guide = "legend") +
+  xlab("alcohol (%vol)") + ylab("volatile acidity (g/dm^3)") +
+  theme(axis.text=element_text(size=11), axis.title = element_text(size=13),
+        legend.position="top")
+
+p2 <- ggplot(aes(alcohol, sulphates, colour = quality), data = wf4) + 
+  geom_point(position = position_jitter(width = .05), alpha = 0.7) + 
+  scale_colour_gradient(low = "blue", high = "red", space = "Lab", 
+                        na.value = "grey50", guide = "legend") +
+  xlab("alcohol (%vol)") + ylab("sulphates (g/dm^3)") +
+  theme(axis.text=element_text(size=11), axis.title = element_text(size=13),
+        legend.position="top")
+
+p3 <- ggplot(aes(x = alcohol, y = volatile.acidity, colour = quality), 
+       data = wf4.subset) + 
+  geom_point(position = position_jitter(width = .05), alpha = 1) + 
+  scale_colour_gradient(low = "blue", high = "red", space = "Lab", 
+                        na.value = "grey50", guide = "legend") +
+  xlab("alcohol (%vol)") + ylab("volatile acidity (g/dm^3)") +
+  theme(axis.text=element_text(size=11), axis.title = element_text(size=13),
+        legend.position="top")
+
+p4 <- ggplot(aes(x = alcohol, y = sulphates, colour = quality), 
+       data = wf4.subset) + 
+  geom_point(position = position_jitter(width = .05), alpha = 1) + 
+  scale_colour_gradient(low = "blue", high = "red", space = "Lab", 
+                        na.value = "grey50", guide = "legend") +
+  xlab("alcohol (%vol)") + ylab("sulphates (g/dm^3)") +
+  theme(axis.text=element_text(size=11), axis.title = element_text(size=13),
+        legend.position="top")
+
+library(grid)
+
+grid.arrange(p1, p2, ncol = 2, 
+top=textGrob("Quality vs alcohol, volatile.acidity and sulphates",
+             gp=gpar(fontsize=20)))
+
+grid.arrange(p3, p4, ncol = 2)
+```
+
+The plot shows the wine quality versus the alcohol content, the sulphates content and the volatile acidity. The wine quality has a meaningful correlation (i.e. |corr.| > 0.3) with all the other three variables. However it is difficult to see visually such correlation across the entire data-set (see plots at the top), as the average wines - i.e. wines with quality equal to 5 or 6 - are the most abundant in the data-set and have a wide range of values for the variables "alcohol", "sulphates" and "volatile.acidity". The correlation of quality versus "alcohol", "sulphates" and "volatile.acidity" can be more easily seen when plotting only the non-average wines (see plots at the bottom), i.e. wines with quality < 5 or > 6). In fact, when limiting our analysis to the non-average wines both correlation coefficients increased in absolute value.
+
+### Plot 3
+
+```{r echo = FALSE}
+
+p1 <- ggplot(aes(fixed.acidity.disc, citric.acid), data = wf4_augmented) + 
+  geom_point(position = position_jitter(width = .21), 
+             color = 'green4', alpha = 0.1) + 
+  geom_line(stat = 'summary', fun.y = mean) + 
+  geom_smooth(method=lm) + xlab("fixed acidity (g/dm^3)") + 
+  ylab("citric acid (g/dm^3)") +
+  theme(axis.text=element_text(size=10), axis.title = element_text(size=13))
+
+p2 <- ggplot(aes(fixed.acidity.disc, pH), data = wf4_augmented) + 
+  geom_point(position = position_jitter(width = .20), 
+             color = 'green4', alpha = 0.1) + 
+  geom_line(stat = 'summary', fun.y = mean) + 
+  geom_smooth(method=lm) + xlab("fixed acidity (g/dm^3)") + 
+  ylab("pH") +
+  theme(axis.text=element_text(size=10), axis.title = element_text(size=13))
+
+p3 <- ggplot(aes(fixed.acidity.disc, density), data = wf4_augmented) + 
+  geom_point(position = position_jitter(width = .18), 
+             color = 'green4', alpha = 0.1) + 
+  geom_line(stat = 'summary', fun.y = mean) + 
+  geom_smooth(method=lm) + xlab("fixed acidity (g/dm^3)") + 
+  ylab("density (g/cm^3)") +
+  theme(axis.text=element_text(size=10), axis.title = element_text(size=13))
+
+p4 <- ggplot(aes(total.sulfur.dioxide.disc, free.sulfur.dioxide), 
+             data = wf4_augmented) + 
+  geom_point(position = position_jitter(width = 3), 
+             color = 'green4', alpha = 0.1) + 
+  geom_line(stat = 'summary', fun.y = mean) + 
+  geom_smooth(method=lm) + xlab("total sulfur (mg/dm^3)") + 
+  ylab("free sulfur (mg/dm^3)") +
+  theme(axis.text=element_text(size=10), axis.title = element_text(size=13))
+
+grid.arrange(p1, p2, p3, p4, ncol = 2, 
+top=textGrob("High correlations (|corr.| > 0.6) bewteeen variables",
+             gp=gpar(fontsize=20)))
+```
+
+Scatter-plots showing the strongest correlations (|corr.| > 0.6) between variables in the red wine data-set. The black line in each plot shows how the mean of the variable in the y-axis varies with the variable in the x-axis. The blue line and the grey strip around it is the linear regression line with the 95% confidence region.
+
+
+***
+
+# Reflection
+The red wine data-set contains information of 1599 varieties of the Portuguese "Vinho Verde" wine. There are 12 variables describing the wine: 11 physicochemical variables (inputs) and 1 sensory variable (output). The output variable is "quality", a categorical variable with values that can span from 0 (very bad testing wine) to 10 (excellent wine). All the wines in the data-set, however, have quality confined between 3 and 8, with the vast majority of them (~82%) having quality equal to 5 (~42%) or 6 (~40%).
+
+First we evaluated the correlation of the different input variables with "quality", the output variable. Only "alcohol" and "volatile.acidity" appeared to have a meaningful correlation (|corr.| > 0.3). However the ranges of values that these two variables can take for different quality categories strongly overlap with each other. Consequently one should be cautious when using them to predict the quality of a wine.
+On a general note we mention that we could not find an obvious correlation between any of the input variable and "quality". Interestingly, when only non-average wines were considered (i.e. wines with quality <5 or >6) the correlation between "quality" and most of the input variables increased. This suggests that the average wines (i.e. wines with quality = 5 or = 6) are affected by a bigger noise.
+
+We then looked at the correlations among all the variables in the data-set. We found strong correlations (i.e. |corr.| > 0.6) between:
+
+<br />
+<ul>
+<li>"fixed.acidity"  -  "citric.acid"  -->  Corr: 0.696</li>
+<li>"fixed.acidity"  -  "density"  -->  Corr: 0.675</li>
+<li>"fixed.acidity"  -  "pH"  -->  Corr: -0.709</li>
+<li>"free.sulfur.dioxide"  -  "total.sulfur.dioxide"  -->  Corr: 0.667</li>
+</ul>
+<br />
+
+Some of these correlations could have been easily predicted. For example, being the pH defined as the negative logarithm base-10 of the concentrations of ions H+ (which determine the acidic content of a solution), it did not come as a surprise that "fixed.acidity" and "pH" have a strong negative correlation.
+The pairs of variables ("citric.acid", "density") and ("pH", "citric acid") also showed meaningful correlations. This also did not come as a surprise as all these three variables ("citric.acid", "pH" and "density") strongly correlated with "fixed.acidity". However these correlations are not strong enough to make any of these variables redundant.
+
+We finally built a classifier (SVM) to predict the wine quality. At first we only used "alcohol" and "volatile.acidity" as descriptors (the only two variables that showed a meaningful correlation with "quality"). However, we noticed that when all the other variables were also included in the model the predictive power of the classifier improved by some percent.
+
+We also dealt with the problem of having two over-represented values of "quality" (as noticed before wines with quality = 5 or = 6 account for 82% of the entire data-set). To decrease the over-fitting of the classifier to the data-points associated with such quality values, we decided to limit the number of data-points for each quality to a maximum of 100. By doing so, the average ratio of correctly classified wines across quality values further increased. However the general performance of the classifier (i.e. the simple ratio between all the correctly versus all the incorrectly classified wines) decreased. This can be ascribed to the fact that quality 5 and 6 are characterized by a higher noise. When forcing the classifier not to over-learn those categorical values, such noise ends up having a stronger effect.
+
+As noticed before, no input variable has an apparent correlation with quality, judging from the corresponding scatter-plots. It is not clear then what transformation of the data could potentially lead to a better set of descriptors for the classifier. Given the small size of the data-set, a further analysis could consist of adding descriptors in the model one by one and for each new addition assessing the performance of the classifier using different transformations on the new added feature.
